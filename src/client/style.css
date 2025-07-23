@@ -94,10 +94,71 @@
 }
 
 .counter-value {
-  font-size: 1.8em;
-  font-weight: 500;
+  font-size: 24px;
+  font-weight: bold;
   margin: 0 20px;
   min-width: 50px;
   text-align: center;
   line-height: 1;
+}
+
+/* New Puzzle Game Styles */
+.message {
+  margin: 20px 0;
+  padding: 15px;
+  border-radius: 8px;
+  font-size: 16px;
+  text-align: center;
+}
+
+.message.hint {
+  background-color: #eef2f7;
+  color: #333;
+}
+
+.message.success {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.message.error {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.guesses-info {
+  margin-bottom: 15px;
+  font-size: 14px;
+  color: #666;
+  text-align: center;
+}
+
+.input-row {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+}
+
+#guess-input {
+  flex-grow: 1;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 16px;
+}
+
+#guess-button {
+  padding: 10px 20px;
+  border: none;
+  background-color: #007bff;
+  color: white;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+#guess-button:disabled {
+  background-color: #aaa;
+  cursor: not-allowed;
 }

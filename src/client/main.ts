@@ -1,93 +1,85 @@
-import {
-  IncrementResponse,
-  DecrementResponse,
-  InitResponse,
-} from "../shared/types/api";
 import { navigateTo } from "@devvit/client";
 
-const counterValueElement = document.getElementById(
-  "counter-value"
-) as HTMLSpanElement;
-const incrementButton = document.getElementById(
-  "increment-button"
+const guessInput = document.getElementById("guess-input") as HTMLInputElement;
+const guessButton = document.getElementById(
+  "guess-button"
 ) as HTMLButtonElement;
-const decrementButton = document.getElementById(
-  "decrement-button"
-) as HTMLButtonElement;
+const messageArea = document.getElementById("message-area") as HTMLDivElement;
+const guessesRemainingElement = document.getElementById(
+  "guesses-remaining"
+) as HTMLDivElement;
 
 const docsLink = document.getElementById("docs-link") as HTMLDivElement;
 const playtestLink = document.getElementById("playtest-link") as HTMLDivElement;
 const discordLink = document.getElementById("discord-link") as HTMLDivElement;
 
-docsLink.addEventListener("click", () => {
-  navigateTo("https://developers.reddit.com/docs");
-});
+docsLink.addEventListener("click", () =>
+  navigateTo("https://developers.reddit.com/docs")
+);
+playtestLink.addEventListener("click", () =>
+  navigateTo("https://www.reddit.com/r/Devvit")
+);
+discordLink.addEventListener("click", () =>
+  navigateTo("https://discord.com/invite/R7yu2wh9Qz")
+);
 
-playtestLink.addEventListener("click", () => {
-  navigateTo("https://www.reddit.com/r/Devvit");
-});
-
-discordLink.addEventListener("click", () => {
-  navigateTo("https://discord.com/invite/R7yu2wh9Qz");
-});
-
-const titleElement = document.getElementById("title") as HTMLHeadingElement;
-
-let currentPostId: string | null = null;
-
-async function fetchInitialCount() {
-  try {
-    const response = await fetch("/api/init");
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    const data = (await response.json()) as InitResponse;
-    if (data.type === "init") {
-      counterValueElement.textContent = data.count.toString();
-      currentPostId = data.postId; // Store postId for later use
-      titleElement.textContent = `Hey ${data.username} 👋`;
-    } else {
-      console.error("Invalid response type from /api/init", data);
-      counterValueElement.textContent = "Error";
-    }
-  } catch (error) {
-    console.error("Error fetching initial count:", error);
-    counterValueElement.textContent = "Error";
-  }
-}
-
-async function updateCounter(action: "increment" | "decrement") {
-  if (!currentPostId) {
-    console.error("Cannot update counter: postId is not initialized.");
-    // Optionally, you could try to re-initialize or show an error to the user.
+async function handleGuess() {
+  const guess = guessInput.value.trim().toLowerCase();
+  if (!guess) {
     return;
   }
 
+  guessButton.disabled = true;
+  guessInput.disabled = true;
+
   try {
-    const response = await fetch(`/api/${action}`, {
+    const response = await fetch("/api/puzzle/hint", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      // The body can be an empty JSON object or include the postId if your backend expects it,
-      // but based on your server code, postId is taken from req.devvit.
-      body: JSON.stringify({}),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ guess }),
     });
+
+    const data = await response.json();
+
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      messageArea.textContent = data.error || "An unknown error occurred.";
+      messageArea.className = "message error";
+      return;
     }
-    const data = (await response.json()) as
-      | IncrementResponse
-      | DecrementResponse;
-    counterValueElement.textContent = data.count.toString();
+
+    if (data.isGameOver) {
+      messageArea.textContent = data.message;
+      guessesRemainingElement.textContent = "";
+      if (data.correct) {
+        messageArea.className = "message success";
+      } else {
+        messageArea.className = "message error";
+      }
+    } else {
+      messageArea.textContent = `Hint: ${data.hint}`;
+      messageArea.className = "message hint";
+      guessesRemainingElement.textContent = `Guesses remaining: ${data.guessesRemaining}`;
+    }
   } catch (error) {
-    console.error(`Error ${action}ing count:`, error);
-    // Optionally, display an error message to the user in the UI
+    messageArea.textContent = "Failed to connect to the server.";
+    messageArea.className = "message error";
+  } finally {
+    guessInput.value = "";
+    if (!messageArea.textContent?.startsWith("You have already")) {
+      guessButton.disabled = false;
+      guessInput.disabled = false;
+      guessInput.focus();
+    }
   }
 }
 
-incrementButton.addEventListener("click", () => updateCounter("increment"));
-decrementButton.addEventListener("click", () => updateCounter("decrement"));
+guessButton.addEventListener("click", handleGuess);
+guessInput.addEventListener("keypress", (event) => {
+  if (event.key === "Enter") {
+    handleGuess();
+  }
+});
 
-// Fetch the initial count when the page loads
-fetchInitialCount();
+// Initial greeting
+messageArea.textContent = "Guess a word to start the puzzle!";
+guessesRemainingElement.textContent = "You have 10 guesses.";

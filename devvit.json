@@ -1,6 +1,6 @@
 {
   "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
-  "name": "<% name %>",
+  "name": "badhints2",
   "post": {
     "client": {
       "dir": "dist/client",
@@ -9,5 +9,19 @@
   },
   "server": {
     "entry": "dist/server/index.cjs"
+  },
+  "dev": {
+    "subreddit": "fuzzytest"
+  },
+  "menu": {
+    "items": [
+      {
+        "label": "Create puzzle",
+        "description": "description for puzzle",
+        "location": "subreddit",
+        "forUserType": "moderator",
+        "endpoint": "/internal/puzzle/create"
+      }
+    ]
   }
 }

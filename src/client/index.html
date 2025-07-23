@@ -7,20 +7,19 @@
       name="viewport"
       content="initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, width=device-width, height=device-height, user-scalable=0"
     />
-    <title>Devvit Experimental</title>
+    <title>Devvit Puzzle Game</title>
   </head>
   <body class="app">
-    <img class="snoo" src="/snoo.png" alt="Snoo" />
     <div class="content">
-      <h1 class="title" id="title"></h1>
-      <p class="description">
-        Edit <span class="code">src/index.ts</span> to get started.
-      </p>
-    </div>
-    <div class="counter-row">
-      <button class="counter-button" id="decrement-button">-</button>
-      <span class="counter-value" id="counter-value">0</span>
-      <button class="counter-button" id="increment-button">+</button>
+      <h1 class="title">Guess the Word</h1>
+      <div id="game-container">
+        <div id="message-area" class="message"></div>
+        <div id="guesses-remaining" class="guesses-info"></div>
+        <div class="input-row">
+          <input type="text" id="guess-input" placeholder="Enter your guess" />
+          <button id="guess-button">Guess</button>
+        </div>
+      </div>
     </div>
     <footer class="footer">
       <div tabindex="0" id="docs-link">Docs</div>
