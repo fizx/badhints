@@ -19,7 +19,9 @@
     "@devvit/client": "next",
     "@devvit/public-api": "next",
     "@devvit/redis": "next",
+    "@devvit/web": "next",
     "@devvit/server": "next",
+    "@devvit/protos": "next",
     "devvit": "next",
     "express": "5.1.0"
   },

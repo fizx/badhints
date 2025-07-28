@@ -1,148 +1,113 @@
+import { Devvit } from "@devvit/public-api";
 import express from "express";
 
 import { createServer, context, getServerPort } from "@devvit/server";
 import { redis } from "@devvit/redis";
 import { reddit } from "@devvit/reddit";
-import { getPuzzleManager, GameState } from "./puzzle";
+import type { UiResponse } from "@devvit/web/shared";
+
+import words from "./words.json";
 
 const app = express();
 
 // Middleware for JSON body parsing
 app.use(express.json());
-// Middleware for URL-encoded body parsing
-app.use(express.urlencoded({ extended: true }));
-// Middleware for plain text body parsing
-app.use(express.text());
 
 const router = express.Router();
 
-const puzzleManager = getPuzzleManager();
-
+// This endpoint is used for a one-time setup to create the puzzle post.
 router.post("/internal/puzzle/create", async (req, res) => {
-  await reddit.submitPost({
-    title: "Bad Hints #1",
-    subredditName: context.subredditName ?? "badhints2_dev",
-    preview: "",
-  });
-  res.json({ message: "Puzzle created" });
+  try {
+    const post = await reddit.submitPost({
+      title: "Bad Hints Puzzle",
+      subredditName: context.subredditName ?? "badhints_dev",
+      postData: {},
+      splash: {
+        appDisplayName: "Bad Hints Puzzle",
+        appIconURI: "https://i.imgur.com/1234567890.png",
+        title: "Bad Hints Puzzle",
+        description: "A puzzle game where you have to guess the word.",
+        buttonLabel: "Play",
+        entryURI: "https://www.reddit.com/r/badhints_dev/comments/1234567890",
+      },
+    });
+    res.json({
+      navigateTo: {
+        url: `https://www.reddit.com${post.permalink}`,
+      },
+    } as UiResponse);
+  } catch (error) {
+    console.error("Failed to create post:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "An unknown error occurred";
+    res.json({
+      showToast: { text: `Error creating post: ${errorMessage}` },
+    } as UiResponse);
+  }
 });
 
-router.post("/api/puzzle/hint", async (req, res) => {
+router.get("/api/puzzle/state", async (req, res) => {
   const { postId, userId } = context;
   if (!postId) {
-    return res.status(400).json({ error: "postId is required" });
+    return res.status(400).json({ error: "Post context is required." });
   }
 
-  const { guess } = req.body;
-  if (!guess || typeof guess !== "string") {
-    return res.status(400).json({ error: "Guess must be a non-empty string." });
-  }
-
-  const vocabulary = puzzleManager.getVocabulary();
-  if (!vocabulary.includes(guess)) {
-    return res.status(400).json({ error: "Word not in vocabulary." });
-  }
-
-  // LAZY INITIALIZATION
-  // Try to get the target word. If it doesn't exist, create it.
-  let targetStateString = await redis.get(`puzzle:target:${postId}`);
-  if (!targetStateString) {
-    const wordIndex = await redis.incrBy("puzzle:globalWordIndex", 1);
-    const shuffledVocab = puzzleManager.getShuffledVocabulary();
-    const targetWord = shuffledVocab[wordIndex % shuffledVocab.length];
-
-    if (!targetWord) {
-      return res.status(500).json({ error: "Could not select a target word." });
-    }
-
-    const targetEmbedding = puzzleManager.getEmbedding(targetWord);
-    if (!targetEmbedding) {
-      return res
-        .status(500)
-        .json({ error: "Could not find embedding for target word." });
-    }
-
-    const newTargetState = { targetWord, targetEmbedding };
-    await redis.set(`puzzle:target:${postId}`, JSON.stringify(newTargetState));
-    targetStateString = JSON.stringify(newTargetState);
-  }
-
-  // Try to get the player state. If it doesn't exist, create it.
-  let playerStateString = await redis.get(`puzzle:player:${postId}:${userId}`);
-  if (!playerStateString) {
-    const newPlayerState = { guessesHistory: [], usedHints: [] };
-    await redis.set(
-      `puzzle:player:${postId}:${userId}`,
-      JSON.stringify(newPlayerState)
+  try {
+    // Determine the target word based on the post's creation date.
+    const post = await reddit.getPostById(postId);
+    const creationDate = new Date(post.createdAt);
+    const dayOfYear = Math.floor(
+      (creationDate.getTime() -
+        new Date(creationDate.getFullYear(), 0, 0).getTime()) /
+        (1000 * 60 * 60 * 24)
     );
-    playerStateString = JSON.stringify(newPlayerState);
+    const targetWord = words[dayOfYear % words.length]!;
+
+    // Fetch the player's state from Redis.
+    const playerStateString = await redis.get(
+      `puzzle:player:${postId}:${userId}`
+    );
+    let playerState;
+    if (playerStateString) {
+      playerState = JSON.parse(playerStateString);
+    } else {
+      // Default state for a new player.
+      playerState = { guessesHistory: [], usedHints: [], solved: false };
+    }
+
+    res.json({ targetWord, playerState });
+  } catch (error) {
+    console.error("Failed to get puzzle state:", error);
+    res.status(500).json({ error: "Failed to retrieve puzzle state." });
+  }
+});
+
+router.post("/api/puzzle/save", async (req, res) => {
+  const { postId, userId } = context;
+  if (!postId) {
+    return res.status(400).json({ error: "Post context is required." });
   }
 
-  const targetState: { targetWord: string; targetEmbedding: number[] } =
-    JSON.parse(targetStateString);
-  const playerState: {
-    guessesHistory: string[];
-    usedHints: string[];
-    solved?: boolean;
-  } = JSON.parse(playerStateString);
-
-  // Check if this player has already completed the puzzle.
-  if (playerState.solved) {
-    return res.json({
-      isGameOver: true,
-      message: `You have already completed this puzzle! The word was '${targetState.targetWord}'.`,
-    });
+  const { guessesHistory, usedHints, solved } = req.body;
+  if (
+    !Array.isArray(guessesHistory) ||
+    !Array.isArray(usedHints) ||
+    typeof solved !== "boolean"
+  ) {
+    return res.status(400).json({ error: "Invalid player state provided." });
   }
 
-  // Add the current guess to history
-  playerState.guessesHistory.push(guess);
-
-  // Check for a win
-  if (guess === targetState.targetWord) {
-    playerState.solved = true;
+  try {
+    const playerState = { guessesHistory, usedHints, solved };
     await redis.set(
       `puzzle:player:${postId}:${userId}`,
       JSON.stringify(playerState)
     );
-    return res.json({
-      correct: true,
-      isGameOver: true,
-      message: `Congratulations! You guessed the word in ${playerState.guessesHistory.length} tries!`,
-    });
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Failed to save puzzle state:", error);
+    res.status(500).json({ error: "Failed to save puzzle state." });
   }
-
-  // Check for a loss (out of guesses)
-  if (playerState.guessesHistory.length >= 10) {
-    playerState.solved = true; // Mark as solved to end the game.
-    await redis.set(
-      `puzzle:player:${postId}:${userId}`,
-      JSON.stringify(playerState)
-    );
-    return res.json({
-      correct: false,
-      isGameOver: true,
-      message: `You've used all 10 guesses! The word was '${targetState.targetWord}'.`,
-    });
-  }
-
-  const gameState: GameState = {
-    ...targetState,
-    ...playerState,
-  };
-
-  const hint = puzzleManager.findHint(guess, gameState);
-  playerState.usedHints.push(hint);
-  await redis.set(
-    `puzzle:player:${postId}:${userId}`,
-    JSON.stringify(playerState)
-  );
-
-  res.json({
-    correct: false,
-    isGameOver: false,
-    hint,
-    guessesRemaining: 10 - playerState.guessesHistory.length,
-  });
 });
 
 // Use router middleware
