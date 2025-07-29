@@ -1,6 +1,7 @@
 import { navigateTo } from "@devvit/client";
 import { getPuzzleManager, GameState } from "./puzzle";
 import { cosineDistance } from "./puzzle";
+import pako from "pako";
 
 const guessInput = document.getElementById("guess-input") as HTMLInputElement;
 const guessButton = document.getElementById(
@@ -9,6 +10,10 @@ const guessButton = document.getElementById(
 const messageArea = document.getElementById("message-area") as HTMLDivElement;
 const guessesRemainingElement = document.getElementById(
   "guesses-remaining"
+) as HTMLDivElement;
+const loader = document.getElementById("loader") as HTMLDivElement;
+const gameContainer = document.getElementById(
+  "game-container"
 ) as HTMLDivElement;
 
 const docsLink = document.getElementById("docs-link") as HTMLDivElement;
@@ -31,9 +36,13 @@ let puzzleManager: ReturnType<typeof getPuzzleManager> | null = null;
 async function initializeGame() {
   try {
     // First, fetch the puzzle's vector data from the client assets.
-    const puzzleData = await fetch("/puzzle_data.json").then((res) =>
-      res.json()
-    );
+    const puzzleDataResponse = await fetch("/puzzle_data.json.gz");
+    if (!puzzleDataResponse.ok) {
+      throw new Error("Failed to fetch puzzle data.");
+    }
+    const compressed = await puzzleDataResponse.arrayBuffer();
+    const decompressed = pako.inflate(compressed, { to: "string" });
+    const puzzleData = JSON.parse(decompressed);
 
     // Initialize the puzzle manager with the vector data.
     puzzleManager = getPuzzleManager({
@@ -68,6 +77,9 @@ async function initializeGame() {
     console.error("Failed to initialize game:", error);
     messageArea.textContent = "Failed to load puzzle data. Please refresh.";
     messageArea.className = "message error";
+  } finally {
+    loader.style.display = "none";
+    gameContainer.style.display = "block";
   }
 }
 

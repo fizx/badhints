@@ -17,18 +17,18 @@ const router = express.Router();
 
 // This endpoint is used for a one-time setup to create the puzzle post.
 router.post("/internal/puzzle/create", async (req, res) => {
+  if (!context.subredditName) {
+    return res.status(400).json({ error: "Subreddit context is required." });
+  }
   try {
     const post = await reddit.submitPost({
       title: "Bad Hints Puzzle",
-      subredditName: context.subredditName ?? "badhints_dev",
-      postData: {},
+      subredditName: context.subredditName,
       splash: {
         appDisplayName: "Bad Hints Puzzle",
-        appIconURI: "https://i.imgur.com/1234567890.png",
         title: "Bad Hints Puzzle",
         description: "A puzzle game where you have to guess the word.",
         buttonLabel: "Play",
-        entryURI: "https://www.reddit.com/r/badhints_dev/comments/1234567890",
       },
     });
     res.json({
